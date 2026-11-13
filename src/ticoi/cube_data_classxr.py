@@ -490,6 +490,15 @@ class CubeDataClass:
 
         return standard_data
 
+    def _loader_modified(self, conf: bool) -> dict:
+        self.author = self.ds.author
+        self.source = self.ds.source
+
+        return {
+            "sensor": self.ds["sensor"].values[0],
+            "source": self.ds["source"].values[0]
+        }
+
     def _loader_itslive(self, conf: bool) -> dict:
         """
         load ITS_LIVE dataset
@@ -609,7 +618,7 @@ class CubeDataClass:
 
         return {
             "vx": self.ds["vx"],
-            "vy": -self.ds["vy"],  # special case for ducasse
+            "vy": -self.ds["vy"],  # special case for lioret
             "date1": date1,
             "date2": date2,
             "sensor": "Pleiades",
@@ -766,16 +775,19 @@ class CubeDataClass:
 
         # get standardized data
         author = self.ds.attrs.get("author", "Unknown")
-        loader = self._loader_registry.get(
-            author, self._loader_generic
-        )  # provide the loader which correspond to the author, if the author does not exist in the dictionary, return the generic loader
-        if isinstance(loader, str):
-            loader = getattr(self, loader)  # provide the function of the class
-        if verbose:
-            if loader == self._loader_registry:
-                print(
-                    f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
-                )
+        if author.startswith("[[modified]]"):
+            loader = self._loader_modified
+        else:
+            loader = self._loader_registry.get(
+                author, self._loader_generic
+            )  # provide the loader which correspond to the author, if the author does not exist in the dictionary, return the generic loader
+            if isinstance(loader, str):
+                loader = getattr(self, loader)  # provide the function of the class
+            if verbose:
+                if loader == self._loader_registry:
+                    print(
+                        f"[Data loading] Warning: Unrecognized author '{author}'. Attempting to load based on defined variable names."
+                    )
         standard_data = loader(conf)
 
         # keep only certain variable and attributes
@@ -1579,7 +1591,7 @@ class CubeDataClass:
         :param dim: [str | list] [default is "x"] --- Dimension.s along which must be split the cube
         :param savepath: [str | None] [default is None] --- If not None, save the new cubes at this location
 
-        :return cubes: [dict] --- Dictionary of the splitcubes (keys describe the position of the cube)
+        :return cubes: [list] --- List of the sub-cubes
         """
 
         cubes = []
@@ -1598,9 +1610,11 @@ class CubeDataClass:
                     ),
                 )
                 cube.update_dimension()
+                cube.author = "[[modified]] " + cube.author
+                cube.ds = cube.ds.assign_attrs({"author": "[[modified]] " + cube.ds.author})
                 if savepath is not None:
-                    cube.ds.to_netcdf(f"{savepath}{dim}_{s}.nc")
-                    print(f"Split cube saved at {savepath}{dim}_{s}.nc")
+                    cube.ds.to_netcdf(f"{savepath}_{dim}{s}.nc")
+                    print(f"Split cube saved at {savepath}_{dim}{s}.nc")
                 cubes.append(cube)
             elif isinstance(dim, list):
                 cube = CubeDataClass(
@@ -1614,11 +1628,14 @@ class CubeDataClass:
                     ),
                 )
                 if len(dim) > 1:
-                    cubes |= cube.split_cube(n_split=n_split, dim=dim[1:], savepath=f"{savepath}{dim[0]}_{s}_")
+                    cubes += cube.split_cube(n_split=n_split, dim=dim[1:], savepath=f"{savepath}_{dim[0]}{s}")
                 else:
+                    cube.update_dimension()
+                    cube.author = "[[modified]] " + cube.author
+                    cube.ds = cube.ds.assign_attrs({"author": "[[modified]] " + cube.ds.author})
                     if savepath is not None:
-                        cube.ds.to_netcdf(f"{savepath}{dim[0]}_{s}.nc")
-                        print(f"Split cube saved at {savepath}{dim[0]}_{s}.nc")
+                        cube.ds.to_netcdf(f"{savepath}_{dim[0]}{s}.nc")
+                        print(f"Split cube saved at {savepath}_{dim[0]}{s}.nc")
                     cubes.append(cube)
 
         return cubes
