@@ -50,7 +50,7 @@ warnings.filterwarnings("ignore")
 TICOI_process = "block_process"
 
 save = False  # If True, save TICOI results to a netCDF file
-save_mean_velocity = False  # Save a .tiff file with the mean resulting velocities, as an example
+save_mean_velocity = True  # Save a .tiff file with the mean resulting velocities, as an example
 
 ## ------------------------------ Data selection --------------------------- ##
 cube_name = example.get_path("ITS_LIVE_Lowell_Lower")
@@ -115,7 +115,7 @@ inversion_kwargs = {
     "threshold_it": 0.1,  # Threshold to test the stability of the results between each iteration, used to stop the process
     "apriori_weight": apriori_weight,  # If True, use apriori weights
     "detect_temporal_decorrelation": True,  # If True, the first inversion will use only velocity observations with small temporal baselines, to detect temporal decorelation
-    "linear_operator": None,  # Perform the inversion using this specific linear operator
+    "linear_operator": "fast",  # Perform the inversion using this specific linear operator
     "interval_output": 30,
     "option_interpol": "spline",  # Type of interpolation ('spline', 'spline_smooth', 'nearest')
     "redundancy": 5,  # Redundancy in the interpolated time series in number of days, no redundancy if None
@@ -129,7 +129,7 @@ inversion_kwargs = {
 nb_cpu = 12  # Number of CPU to be used for parallelization
 block_size = 0.5  # Maximum sub-block size (in GB) for the 'block_process' TICOI processing method
 
-if save and not os.path.exists(path_save):
+if (save or save_mean_velocity) and not os.path.exists(path_save):
     os.mkdir(path_save)
 
 # Update of dictionary with common parameters
@@ -203,7 +203,7 @@ print(f"[cube_ticoi_demo] TICOI processing took {round(stop[-1] - start[-1], 0)}
 
 start.append(time.time())
 # Write down some information about the data and the TICOI processing performed
-if save:
+if save or save_mean_velocity:
     if "invert" in returned:
         source, sensor = save_cube_parameters(cube, load_kwargs, preData_kwargs, inversion_kwargs, returned="invert")
     if "interp" in returned:
@@ -220,34 +220,40 @@ if save:
 
 start.append(time.time())
 
-if save:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
+if save or save_mean_velocity:  # Save TICOI results to a netCDF file, thus obtaining a new data cube
     print("[cube_ticoi_demo] Writing results to netCDF file with result_writer")
     several = isinstance(returned, list) and len(returned) >= 2
     writer = CubeResultsWriter(cube)
+
     if "invert" in returned:
         cube_invert = writer.write_result_tico(
             result["invert"] if several else result,
             source,
             sensor,
             result_quality=inversion_kwargs["result_quality"],
-            filename=f"{result_fn}_invert1" if several else result_fn,
+            filename=f"{result_fn}_invert" if several else result_fn,
             savepath=path_save if save else None,
             verbose=inversion_kwargs["verbose"],
         )
+
+        # Plot mean velocity of inverted results
+        if not "interp" in returned and save_mean_velocity:
+            cube_invert.average_cube(return_format="geotiff", return_variable=["vv"], save=True, path_save=path_save)
+
     if "interp" in returned:
         cube_interp = writer.write_result_ticoi(
             result["interp"] if several else result,
             source_interp,
             sensor,
             result_quality=inversion_kwargs["result_quality"],
-            filename=f"{result_fn}_interp1" if several else result_fn,
+            filename=f"{result_fn}_interp" if several else result_fn,
             savepath=path_save if save else None,
             verbose=inversion_kwargs["verbose"],
         )
 
-# Plot the mean velocity as an example
-if save_mean_velocity and cube_interp is not None:
-    cube_interp.average_cube(return_format="geotiff", return_variable=["vv"], save=True, path_save=path_save)
+        # Plot mean velocity of interpolated results
+        if save_mean_velocity:
+            cube_interp.average_cube(return_format="geotiff", return_variable=["vv"], save=True, path_save=path_save)
 
 stop.append(time.time())
 if save or save_mean_velocity:

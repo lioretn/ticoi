@@ -107,6 +107,7 @@ class CubeDataClass:
         "L. Charrier": "_loader_charrier",
         "E. Ducasse": "_loader_ducasse",
         "IGE": "_loader_charrier",
+        "Institut des Géosciences de l'Environnement, Grenoble": "_loader_lioret"
     }
 
     def __init__(self, cube=None, ds=None):
@@ -574,6 +575,36 @@ class CubeDataClass:
         dates = self.ds["mid_date"].values
         date1 = xr.DataArray([d.split(" ")[0] for d in dates], dims="mid_date").astype("datetime64[ns]")
         date2 = xr.DataArray([d.split(" ")[1] for d in dates], dims="mid_date").astype("datetime64[ns]")
+        self.ds = self.ds.assign_coords(mid_date=date1 + (date2 - date1) / 2)
+
+        return {
+            "vx": self.ds["vx"],
+            "vy": -self.ds["vy"],  # special case for ducasse
+            "date1": date1,
+            "date2": date2,
+            "sensor": "Pleiades",
+            "source": "IGE",
+            "errorx": 1.0,
+            "errory": 1.0,
+        }
+
+    def _loader_lioret(self, conf: bool) -> dict:
+        """
+        load Lioret dataset
+        :param conf: [bool] --- if the errors need to be converted as confidence
+        :return:
+        """
+
+        self.author = "Institut des Géosciences de l'Environnement, Grenoble"
+        self.source = "Institut des Géosciences de l'Environnement, Grenoble"
+        self.ds = self.ds.rename({"time": "mid_date", "lat": "y", "lon": "x"})
+        self.ds = self.ds.transpose("mid_date", "y", "x")  # transpose coordinates
+        self.ds = self.ds.assign_attrs({"proj4": "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs"})
+
+        # standardize date format
+        dates = self.ds["mid_date"].values
+        date1 = xr.DataArray([f"{d[:4]}-{d[4:6]}-{d[6:8]}" for d in dates], dims="mid_date").astype("datetime64[ns]")
+        date2 = xr.DataArray([f"{d[9:13]}-{d[13:15]}-{d[15:]}" for d in dates], dims="mid_date").astype("datetime64[ns]")
         self.ds = self.ds.assign_coords(mid_date=date1 + (date2 - date1) / 2)
 
         return {

@@ -171,3 +171,5 @@ cython_debug/
 /examples/basic/config/demo_cube.nc
 /examples/results/config_demo/
 /resolved-config.json
+
+/.vscode/
